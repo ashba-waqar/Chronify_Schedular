@@ -1,0 +1,52 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidTask(task) {
+      return task.title is string 
+          && task.title.size() > 0 
+          && task.title.size() <= 200
+          && task.priority in ['high', 'medium', 'low']
+          && task.category in ['study', 'work', 'personal', 'health']
+          && task.completed is bool;
+    }
+
+    // User Root Data Tree
+    match /users/{userId} {
+      // User profile root document
+      allow read, write: if isOwner(userId);
+
+      // User Tasks collection
+      match /tasks/{taskId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidTask(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      // User Settings collection (e.g. pomodoro settings, preferences)
+      match /settings/{settingId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // User Analytics & App Stats collection
+      match /stats/{statId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Default deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
