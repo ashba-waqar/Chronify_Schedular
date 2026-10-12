@@ -129,6 +129,32 @@ const CloudSync = {
       });
   },
 
+  signInWithEmail(email, password) {
+    if (!this.isConfigured) return Promise.reject(new Error('Firebase not configured'));
+    this.updateStatus('syncing');
+    return firebase.auth().signInWithEmailAndPassword(email, password)
+      .catch(err => {
+        this.updateStatus('error');
+        throw err;
+      });
+  },
+
+  signUpWithEmail(email, password, displayName = '') {
+    if (!this.isConfigured) return Promise.reject(new Error('Firebase not configured'));
+    this.updateStatus('syncing');
+    return firebase.auth().createUserWithEmailAndPassword(email, password)
+      .then(cred => {
+        if (displayName && cred.user) {
+          return cred.user.updateProfile({ displayName }).then(() => cred);
+        }
+        return cred;
+      })
+      .catch(err => {
+        this.updateStatus('error');
+        throw err;
+      });
+  },
+
   signInAnonymously() {
     if (!this.isConfigured) return Promise.reject(new Error('Firebase not configured'));
     this.updateStatus('syncing');

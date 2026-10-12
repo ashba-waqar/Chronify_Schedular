@@ -1359,6 +1359,12 @@ function initCloudSync() {
 
 function openCloudModal() {
   $('cloud-modal-overlay')?.classList.add('show');
+  const cfg = DB.load('sf_firebase_config', null);
+  if (cfg) {
+    if ($('cfg-api-key') && cfg.apiKey && cfg.apiKey !== 'YOUR_API_KEY') $('cfg-api-key').value = cfg.apiKey;
+    if ($('cfg-project-id') && cfg.projectId && cfg.projectId !== 'YOUR_PROJECT_ID') $('cfg-project-id').value = cfg.projectId;
+    if ($('cfg-app-id') && cfg.appId && cfg.appId !== 'YOUR_APP_ID') $('cfg-app-id').value = cfg.appId;
+  }
   renderCloudAccountCard();
 }
 
@@ -1371,43 +1377,60 @@ function renderCloudAccountCard() {
   const card = $('cloud-account-card');
   if (!card) return;
 
+  const authSection = $('firebase-auth-section');
+  const loggedinControls = $('firebase-loggedin-controls');
+
   if (typeof CloudSync === 'undefined' || !CloudSync.isConfigured) {
     card.innerHTML = `
-      <div style="font-weight:600;font-size:14px;color:var(--amber);margin-bottom:4px;display:flex;align-items:center;gap:6px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg> Local Storage Mode
-      </div>
-      <div style="font-size:12px;color:var(--text-secondary);">Your data is saved locally on this device. Enter your Firebase project credentials below to connect cloud sync.</div>`;
-    if ($('btn-google-auth')) $('btn-google-auth').style.display = 'none';
-    if ($('btn-anon-auth')) $('btn-anon-auth').style.display = 'none';
-    if ($('btn-signout')) $('btn-signout').style.display = 'none';
+      <div style="padding:12px;background:var(--bg-tertiary);border-radius:10px;border:1px solid var(--border);">
+        <div style="font-weight:600;font-size:14px;color:var(--amber);margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg> Local Mode (Firebase Unconfigured)
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);">Your tasks are currently saved locally. Enter your Firebase project credentials below to enable real-time cloud sync & authentication.</div>
+      </div>`;
+
+    if (authSection) authSection.style.display = 'none';
+    if (loggedinControls) loggedinControls.style.display = 'none';
+    updateCloudSyncBadge('unconfigured', null);
     return;
   }
 
   const user = CloudSync.currentUser;
   if (user) {
     const isAnon = user.isAnonymous;
-    const name = user.displayName || (isAnon ? 'Guest Workspace' : user.email);
+    const name = user.displayName || (isAnon ? 'Guest Workspace' : (user.email ? user.email.split('@')[0] : 'User'));
+    const email = user.email || (isAnon ? 'Anonymous Cloud Session' : '');
+    const providerId = isAnon ? 'Guest' : (user.providerData && user.providerData[0] ? user.providerData[0].providerId : 'Firebase');
+
     card.innerHTML = `
-      <div style="display:flex;align-items:center;gap:12px;">
-        <div style="font-size:24px;display:flex;align-items:center;">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-tertiary);border-radius:10px;border:1px solid var(--border);">
+        <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px;">
+          ${name.charAt(0).toUpperCase()}
         </div>
-        <div>
-          <div style="font-weight:600;font-size:14px;">${escHtml(name)}</div>
-          <div style="font-size:11px;color:var(--text-muted);">${isAnon ? 'Anonymous Guest Session' : user.email}</div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:14px;color:var(--text-primary);">${escHtml(name)}</div>
+          <div style="font-size:12px;color:var(--text-muted);">${escHtml(email)}</div>
         </div>
-        <span class="badge badge-low" style="margin-left:auto;">${isAnon ? 'Guest' : 'Cloud Synced'}</span>
+        <span class="task-priority-badge badge-low" style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3);">
+          ${isAnon ? 'Guest Cloud' : 'Firebase Synced'}
+        </span>
       </div>`;
-    if ($('btn-google-auth')) $('btn-google-auth').style.display = isAnon ? 'block' : 'none';
-    if ($('btn-anon-auth')) $('btn-anon-auth').style.display = 'none';
-    if ($('btn-signout')) $('btn-signout').style.display = 'block';
+
+    if (authSection) authSection.style.display = 'none';
+    if (loggedinControls) loggedinControls.style.display = 'block';
+    updateCloudSyncBadge('synced', user);
   } else {
     card.innerHTML = `
-      <div style="font-weight:600;font-size:14px;color:var(--text-primary);margin-bottom:4px;">Not Signed In</div>
-      <div style="font-size:12px;color:var(--text-secondary);">Sign in to synchronize tasks real-time across your web and mobile clients.</div>`;
-    if ($('btn-google-auth')) $('btn-google-auth').style.display = 'block';
-    if ($('btn-anon-auth')) $('btn-anon-auth').style.display = 'block';
-    if ($('btn-signout')) $('btn-signout').style.display = 'none';
+      <div style="padding:12px;background:var(--bg-tertiary);border-radius:10px;border:1px solid var(--border);">
+        <div style="font-weight:600;font-size:14px;color:var(--cyan);margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg> Firebase Connected
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);">Sign in with Google, Email, or Guest mode to synchronize your tasks in real time across all devices.</div>
+      </div>`;
+
+    if (authSection) authSection.style.display = 'block';
+    if (loggedinControls) loggedinControls.style.display = 'none';
+    updateCloudSyncBadge('offline', null);
   }
 }
 
@@ -1421,24 +1444,96 @@ function updateCloudSyncBadge(status, user) {
 
   if (status === 'synced') {
     txt.textContent = 'Cloud Synced';
-    if (usr) usr.textContent = user ? (user.displayName || (user.isAnonymous ? 'Guest' : user.email.split('@')[0])) : '';
+    if (usr) usr.textContent = user ? (user.displayName || (user.isAnonymous ? 'Guest' : (user.email ? user.email.split('@')[0] : 'User'))) : '';
   } else if (status === 'syncing') {
     txt.textContent = 'Syncing...';
   } else if (status === 'offline') {
     txt.textContent = 'Offline';
   } else if (status === 'unconfigured') {
     txt.textContent = 'Local Mode';
+    if (usr) usr.textContent = '';
   } else {
     txt.textContent = 'Sync Error';
   }
 }
 
+function switchFbAuthTab(tab) {
+  const loginBtn = $('tab-fb-login');
+  const regBtn = $('tab-fb-register');
+  const loginForm = $('form-fb-login');
+  const regForm = $('form-fb-register');
+
+  if (tab === 'login') {
+    loginBtn?.classList.add('active');
+    regBtn?.classList.remove('active');
+    if (loginForm) loginForm.style.display = 'block';
+    if (regForm) regForm.style.display = 'none';
+  } else {
+    regBtn?.classList.add('active');
+    loginBtn?.classList.remove('active');
+    if (regForm) regForm.style.display = 'block';
+    if (loginForm) loginForm.style.display = 'none';
+  }
+}
+
+function handleFirebaseEmailLogin(e) {
+  e.preventDefault();
+  const email = $('fb-login-email')?.value.trim();
+  const password = $('fb-login-password')?.value;
+  if (!email || !password) return;
+
+  if (typeof CloudSync === 'undefined' || !CloudSync.isConfigured) {
+    showToast('Please configure Firebase project credentials below first', 'error');
+    return;
+  }
+
+  showToast('Signing in with Firebase...', 'info');
+  CloudSync.signInWithEmail(email, password)
+    .then(() => {
+      showToast('Signed in successfully!', 'success');
+      renderCloudAccountCard();
+      closeCloudModal();
+    })
+    .catch(err => {
+      showToast(`Login error: ${err.message}`, 'error');
+    });
+}
+
+function handleFirebaseEmailRegister(e) {
+  e.preventDefault();
+  const name = $('fb-reg-name')?.value.trim();
+  const email = $('fb-reg-email')?.value.trim();
+  const password = $('fb-reg-password')?.value;
+  if (!email || !password) return;
+
+  if (typeof CloudSync === 'undefined' || !CloudSync.isConfigured) {
+    showToast('Please configure Firebase project credentials below first', 'error');
+    return;
+  }
+
+  showToast('Creating Firebase account...', 'info');
+  CloudSync.signUpWithEmail(email, password, name)
+    .then(() => {
+      showToast('Account created and signed in!', 'success');
+      renderCloudAccountCard();
+      closeCloudModal();
+    })
+    .catch(err => {
+      showToast(`Registration error: ${err.message}`, 'error');
+    });
+}
+
 function handleGoogleSignIn() {
-  if (typeof CloudSync === 'undefined') return;
+  if (typeof CloudSync === 'undefined' || !CloudSync.isConfigured) {
+    showToast('Please configure Firebase credentials below first', 'error');
+    return;
+  }
+  showToast('Connecting with Google...', 'info');
   CloudSync.signInWithGoogle()
     .then(() => {
       showToast('Signed in with Google! Cloud Sync active.', 'success');
       renderCloudAccountCard();
+      closeCloudModal();
     })
     .catch(err => {
       showToast(`Sign in error: ${err.message}`, 'error');
@@ -1446,11 +1541,16 @@ function handleGoogleSignIn() {
 }
 
 function handleAnonSignIn() {
-  if (typeof CloudSync === 'undefined') return;
+  if (typeof CloudSync === 'undefined' || !CloudSync.isConfigured) {
+    showToast('Please configure Firebase credentials below first', 'error');
+    return;
+  }
+  showToast('Starting Guest session...', 'info');
   CloudSync.signInAnonymously()
     .then(() => {
       showToast('Guest cloud workspace active!', 'success');
       renderCloudAccountCard();
+      closeCloudModal();
     })
     .catch(err => {
       showToast(`Guest sign in error: ${err.message}`, 'error');
@@ -1461,8 +1561,12 @@ function handleSignOut() {
   if (typeof CloudSync === 'undefined') return;
   CloudSync.signOut()
     .then(() => {
-      showToast('Signed out of Cloud Sync', 'info');
+      showToast('Signed out from Firebase', 'info');
       renderCloudAccountCard();
+      updateCloudSyncBadge('unconfigured', null);
+    })
+    .catch(err => {
+      showToast(`Sign out error: ${err.message}`, 'error');
     });
 }
 
@@ -1473,21 +1577,21 @@ function handleSaveCloudConfig(e) {
   const appId = $('cfg-app-id').value.trim();
 
   if (!apiKey || !projectId) {
-    showToast('Please enter API Key and Project ID', 'error');
+    showToast('Please enter Firebase API Key and Project ID', 'error');
     return;
   }
 
   const customConfig = {
     apiKey,
     projectId,
-    appId: appId || '1:12345:web:default',
+    appId: appId || `1:12345:web:${projectId}`,
     authDomain: `${projectId}.firebaseapp.com`,
     storageBucket: `${projectId}.appspot.com`
   };
 
   const success = CloudSync.saveConfig(customConfig);
   if (success) {
-    showToast('Firebase configuration saved!', 'success');
+    showToast('Firebase configuration saved & connected!', 'success');
     renderCloudAccountCard();
     closeCloudModal();
   } else {
@@ -1509,6 +1613,7 @@ function init() {
 
   // Initialize Cloud Sync & Timer
   initCloudSync();
+  renderCloudAccountCard();
   timerSecondsLeft = getModeSeconds();
   updateTimerDisplay();
   updateSessionDots();
